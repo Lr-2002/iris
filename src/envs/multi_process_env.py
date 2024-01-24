@@ -77,6 +77,7 @@ class MultiProcessEnv(DoneTrackerEnv):
 
     def reset(self) -> np.ndarray:
         self.reset_done_tracker()
+        # print('env reset')
         for parent_conn in self.parent_conns:
             parent_conn.send(Message(MessageType.RESET))
         content = self._receive(check_type=MessageType.RESET_RETURN)

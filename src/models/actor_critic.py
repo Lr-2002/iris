@@ -35,7 +35,7 @@ class ImagineOutput:
 
 
 class ActorCritic(nn.Module):
-    def __init__(self, act_vocab_size, use_original_obs: bool = False) -> None:
+    def __init__(self, act_vocab_size, ac_env, use_original_obs: bool = False) -> None:
         super().__init__()
         self.use_original_obs = use_original_obs
         self.conv1 = nn.Conv2d(3, 32, 3, stride=1, padding=1)
@@ -61,6 +61,8 @@ class ActorCritic(nn.Module):
 
         self.critic_linear = nn.Linear(512, 1)
         self.actor_linear = nn.Linear(512, act_vocab_size)
+
+        self.ac_env  = ac_env
 
     def __repr__(self) -> str:
         return "actor_critic"
@@ -90,7 +92,7 @@ class ActorCritic(nn.Module):
         image = inputs['image']
         token = inputs['token']
         assert token.ndim == 2 and token.shape[-1] == 1, token.shape
-        assert image.ndim == 4 and image.shape[1:] == (3, 64, 64)
+        assert image.ndim == 4 and image.shape[1:] == (3, 64, 64) , image.shape
         assert 0 <= image.min() <= 1 and 0 <= image.max() <= 1
         assert mask_padding is None or (mask_padding.ndim == 1 and mask_padding.size(0) == image.size(0) and mask_padding.any())
         x = image[mask_padding] if mask_padding is not None else image
@@ -122,7 +124,8 @@ class ActorCritic(nn.Module):
 
     def compute_loss(self, batch: Batch, tokenizer: Tokenizer, world_model: WorldModel, imagine_horizon: int, gamma: float, lambda_: float, entropy_weight: float, **kwargs: Any) -> LossWithIntermediateLosses:
         assert not self.use_original_obs
-        outputs = self.imagine(batch, tokenizer, world_model, horizon=imagine_horizon)
+        # outputs = self.imagine(batch, tokenizer, world_model, horizon=imagine_horizon)
+        outputs = self.rollout_in_env(batch, horizon=imagine_horizon)
         # for i in len(imagine_horizon):
 
         with torch.no_grad():
@@ -141,8 +144,59 @@ class ActorCritic(nn.Module):
         loss_actions = -1 * (log_probs * (lambda_returns - values.detach())).mean()
         loss_entropy = - entropy_weight * d.entropy().mean()
         loss_values = F.mse_loss(values, lambda_returns)
+        total_reward = outputs.rewards.sum(dim=1).float().mean()
 
-        return LossWithIntermediateLosses(loss_actions=loss_actions, loss_values=loss_values, loss_entropy=loss_entropy)
+        return LossWithIntermediateLosses(loss_actions=loss_actions, loss_values=loss_values, loss_entropy=loss_entropy, total_reward=total_reward)
+
+    def rollout_in_env(self, batch: Batch, horizon: int, show_pbar: bool = False) -> ImagineOutput:
+        # use the multi env to get the data and train it on the env
+        # the batch is not usefull, and i'll start the env in reset
+        # and then burn them in the model
+        # when the steps have got to 20 ,then start the collection time
+        device = batch['observations']['token'].device
+        obs= self.ac_env.reset()
+        obs = {'image': rearrange(torch.tensor(obs['image']).to(device) / 255, 'n w h c -> n c w h'),
+               'token': torch.tensor(obs['token']).unsqueeze(1).to(device)}
+
+        all_actions = []
+        all_logits_actions = []
+        all_values = []
+        all_rewards = []
+        all_ends = []
+        all_observations = []
+        self.reset(n=self.ac_env.num_envs)
+
+        for k in tqdm(range(horizon), disable=not show_pbar, desc='Rollout', file=sys.stdout):
+            # imagine todo
+            all_observations.append(obs)
+
+            outputs_ac = self(obs)
+            action_token = (Categorical(logits=outputs_ac.logits_actions).sample())
+            act= action_token.squeeze(-1).cpu().numpy()
+            obs, reward, done, _ = self.ac_env.step(act)
+            obs = {'image': rearrange(torch.tensor(obs['image']).to(device) / 255, 'n w h c -> n c w h'),
+                   'token': torch.tensor(obs['token']).unsqueeze(1).to(device)}
+            reward = torch.tensor(reward).unsqueeze(1).to(device)
+            done = torch.tensor(done).unsqueeze(1).to(device)
+            all_actions.append(action_token)
+            all_logits_actions.append(outputs_ac.logits_actions)
+            all_values.append(outputs_ac.means_values)
+            all_rewards.append(torch.tensor(reward).reshape(-1, 1))
+            all_ends.append(torch.tensor(done).reshape(-1, 1))
+        self.clear()
+        # print('all obs ', all_observations)
+        imgs = [x['image'] for x in all_observations]
+        imgs = torch.stack(imgs, dim=1).mul(255).byte()
+        tokens = [x['token'] for x in all_observations]
+        tokens = torch.cat(tokens, dim=1)
+        return ImagineOutput(
+            observations={'image':imgs, 'token':tokens},      # (B, T, C, H, W) in [0, 255]
+            actions=torch.cat(all_actions, dim=1),                                  # (B, T)
+            logits_actions=torch.cat(all_logits_actions, dim=1),                    # (B, T, #actions)
+            values=rearrange(torch.cat(all_values, dim=1), 'b t 1 -> b t'),         # (B, T)
+            rewards=torch.cat(all_rewards, dim=1).to(device),                       # (B, T)
+            ends=torch.cat(all_ends, dim=1).to(device),                             # (B, T)
+        )
 
     def imagine(self, batch: Batch, tokenizer: Tokenizer, world_model: WorldModel, horizon: int, show_pbar: bool = False) -> ImagineOutput:
         assert not self.use_original_obs

@@ -84,7 +84,7 @@ class Trainer:
 
         tokenizer = instantiate(cfg.tokenizer)
         world_model = WorldModel(obs_vocab_size=tokenizer.vocab_size, act_vocab_size=env.num_actions, config=instantiate(cfg.world_model))
-        actor_critic = ActorCritic(**cfg.actor_critic, act_vocab_size=env.num_actions)
+        actor_critic = ActorCritic(**cfg.actor_critic, ac_env= env, act_vocab_size=env.num_actions)
         self.agent = Agent(tokenizer, world_model, actor_critic).to(self.device)
         print(f'{sum(p.numel() for p in self.agent.tokenizer.parameters())} parameters in agent.tokenizer')
         print(f'{sum(p.numel() for p in self.agent.world_model.parameters())} parameters in agent.world_model')
@@ -111,13 +111,13 @@ class Trainer:
             if self.cfg.training.should:
                 if epoch <= self.cfg.collection.train.stop_after_epochs:
                     to_log += self.train_collector.collect(self.agent, epoch, **self.cfg.collection.train.config)
-                if epoch % 5 == 0:
-                    to_log += self.train_agent(epoch)
+                # if epoch % 5 == 0:
+                to_log += self.train_agent(epoch)
 
-            if self.cfg.evaluation.should and (epoch % self.cfg.evaluation.every == 0):
-                self.test_dataset.clear()
-                to_log += self.test_collector.collect(self.agent, epoch, **self.cfg.collection.test.config, info_flag=True)
-                to_log += self.eval_agent(epoch)
+            # if self.cfg.evaluation.should and (epoch % self.cfg.evaluation.every == 0):
+                # self.test_dataset.clear()
+                # to_log += self.test_collector.collect(self.agent, epoch, **self.cfg.collection.test.config, info_flag=True)
+                # to_log += self.eval_agent(epoch)
 
             if self.cfg.training.should:
                 self.save_checkpoint(epoch, save_agent_only=not self.cfg.common.do_checkpoint)
@@ -194,12 +194,12 @@ class Trainer:
         if epoch > cfg_world_model.start_after_epochs:
             metrics_world_model = self.eval_component(self.agent.world_model, cfg_world_model.batch_num_samples, sequence_length=self.cfg.common.sequence_length, tokenizer=self.agent.tokenizer)
 
-        if epoch > cfg_actor_critic.start_after_epochs:
-            self.inspect_imagination(epoch)
+        # if epoch > cfg_actor_critic.start_after_epochs:
+        #     self.inspect_imagination(epoch)
 
-        if cfg_tokenizer.save_reconstructions:
-            batch = self._to_device(self.test_dataset.sample_batch(batch_num_samples=3, sequence_length=self.cfg.common.sequence_length))
-            make_reconstructions_from_batch(batch, save_dir=self.reconstructions_dir, epoch=epoch, tokenizer=self.agent.tokenizer)
+        # if cfg_tokenizer.save_reconstructions:
+        #     batch = self._to_device(self.test_dataset.sample_batch(batch_num_samples=3, sequence_length=self.cfg.common.sequence_length))
+        #     make_reconstructions_from_batch(batch, save_dir=self.reconstructions_dir, epoch=epoch, tokenizer=self.agent.tokenizer)
 
         return [metrics_tokenizer, metrics_world_model]
 
