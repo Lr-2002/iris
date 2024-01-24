@@ -144,9 +144,9 @@ class ActorCritic(nn.Module):
         loss_actions = -1 * (log_probs * (lambda_returns - values.detach())).mean()
         loss_entropy = - entropy_weight * d.entropy().mean()
         loss_values = F.mse_loss(values, lambda_returns)
-        total_reward = outputs.rewards.sum(dim=1).float().mean()
+        # total_reward = outputs.rewards.sum(dim=1).float().mean()
 
-        return LossWithIntermediateLosses(loss_actions=loss_actions, loss_values=loss_values, loss_entropy=loss_entropy, total_reward=total_reward)
+        return LossWithIntermediateLosses(loss_actions=loss_actions, loss_values=loss_values, loss_entropy=loss_entropy)
 
     def rollout_in_env(self, batch: Batch, horizon: int, show_pbar: bool = False) -> ImagineOutput:
         # use the multi env to get the data and train it on the env

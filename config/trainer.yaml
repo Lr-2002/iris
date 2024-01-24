@@ -32,8 +32,8 @@ common:
 collection:
   train:
     num_envs: 2
-    stop_after_epochs: 1
-    num_episodes_to_save: 10
+    stop_after_epochs: 600
+    num_episodes_to_save: 500
     config:
       epsilon: 0.01
       should_sample: True
