@@ -57,21 +57,21 @@ training:
     batch_num_samples: 256
     grad_acc_steps: 1
     max_grad_norm: 10.0
-    start_after_epochs: 5
-    steps_per_epoch: 200
+    start_after_epochs: 1
+    steps_per_epoch: 2
   world_model:
     batch_num_samples: 64
     grad_acc_steps: 1
     max_grad_norm: 10.0
     weight_decay: 0.01
-    start_after_epochs: 25
-    steps_per_epoch: 200
+    start_after_epochs: 1
+    steps_per_epoch: 2
   actor_critic:
     batch_num_samples: 64
     grad_acc_steps: 1
     max_grad_norm: 10.0
-    start_after_epochs: 50
-    steps_per_epoch: 200
+    start_after_epochs: 1
+    steps_per_epoch: 2
     imagine_horizon: ${common.sequence_length}
     burn_in: 20
     gamma: 0.995

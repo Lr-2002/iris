@@ -12,8 +12,8 @@ from .slicer import Embedder, Head
 from .tokenizer import Tokenizer
 from .transformer import Transformer, TransformerConfig
 from utils import init_weights, LossWithIntermediateLosses
-
-
+from .hiss_model import  MambaModel
+# from mamba_ssm import Mamba
 @dataclass
 class WorldModelOutput:
     output_sequence: torch.FloatTensor
@@ -27,8 +27,11 @@ class WorldModel(nn.Module):
         super().__init__()
         self.obs_vocab_size, self.act_vocab_size = obs_vocab_size, act_vocab_size
         self.config = config
-        self.transformer = Transformer(config)
-
+        # self.transformer = Transformer(config)
+        self.mamba = MambaModel(
+            input_dim=256,
+            output_dim=256,
+        )
         all_but_last_obs_tokens_pattern = torch.ones(config.tokens_per_block)
         all_but_last_obs_tokens_pattern[-2] = 0
         act_tokens_pattern = torch.zeros(self.config.tokens_per_block)
@@ -86,7 +89,7 @@ class WorldModel(nn.Module):
 
         sequences = self.embedder(tokens, num_steps, prev_steps) + self.pos_emb(prev_steps + torch.arange(num_steps, device=tokens.device))
 
-        x = self.transformer(sequences, past_keys_values)
+        x = self.mamba(sequences)
 
         logits_observations = self.head_observations(x, num_steps=num_steps, prev_steps=prev_steps)
         logits_rewards = self.head_rewards(x, num_steps=num_steps, prev_steps=prev_steps)

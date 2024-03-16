@@ -21,6 +21,9 @@ def configure_optimizer(model, learning_rate, weight_decay, *blacklist_module_na
     for mn, m in model.named_modules():
         for pn, p in m.named_parameters():
             fpn = '%s.%s' % (mn, pn) if mn else pn  # full param name
+            if 'mamba' in mn:
+                no_decay.add(fpn)
+                continue
             if any([fpn.startswith(module_name) for module_name in blacklist_module_names]):
                 no_decay.add(fpn)
             elif 'bias' in pn:

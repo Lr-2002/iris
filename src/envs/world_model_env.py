@@ -48,7 +48,7 @@ class WorldModelEnv:
     def refresh_keys_values_with_initial_obs_tokens(self, obs_tokens: torch.LongTensor) -> torch.FloatTensor:
         n, num_observations_tokens = obs_tokens.shape
         assert num_observations_tokens == self.num_observations_tokens
-        self.keys_values_wm = self.world_model.transformer.generate_empty_keys_values(n=n, max_tokens=self.world_model.config.max_tokens)
+        self.keys_values_wm = self.world_model.mamba.generate_empty_keys_values(n=n, max_tokens=self.world_model.config.max_tokens)
         outputs_wm = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm)
         return outputs_wm.output_sequence  # (B, K, E)
 
